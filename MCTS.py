@@ -1,26 +1,6 @@
 import numpy as np
 from copy import deepcopy
 
-# class Node:
-#   def __init__(self, index, value = None, parent = None):
-#     self.childnodes = [0,0]
-#     self.parent = parent
-#     self.value = value
-#     self.total = 0
-#     self.index = index
-#     self.count = 0 
-
-#   def update_value(self, new_value):
-#     self.count += 1
-#     self.total += new_value
-
-#   def get_UCB(self, c):
-#     if self.count == 0:
-#       return 1e8
-#     else:
-#       return self.total/self.count + c*np.sqrt(np.log(self.parent.count)/self.count)
-
-
 class Node:
     def __init__(self,board,index, player_move, parent = None):
         self.children = []
@@ -28,7 +8,7 @@ class Node:
         self.index = index
         self.board = board
         self.value = self.check_winner(board)
-        self.terminal = self.value != False
+        self.terminal = self.value != None
         self.player_move = player_move
 
     def create_children(self,board):
@@ -45,6 +25,10 @@ class Node:
     def give_moves(self,board):
         return np.argwhere(board == 0)
 
+    def rollout(self):
+        pass
+
+
     def check_winner(self,board):
         col1 = np.ones(3,dtype=int).tolist()
         col2 = np.repeat(2,3).tolist()
@@ -57,7 +41,7 @@ class Node:
         elif self.check_full(board):
             return 0
         else:
-            return False
+            return None
 
     def check_win(self,board,col):
         if (col in board.tolist() or col in board.T.tolist() or board.diagonal().tolist() == col or 
@@ -69,30 +53,24 @@ class Node:
             return True
 
 
-def minimax(node, max_player, board_seq = []):
+def minimax(node, max_player):
     if node.terminal:
-        return node.value, board_seq
+        return node.value
     if max_player:
-        max_eval = -100
         node.create_children(node.board)
+        max_eval = -np.inf
         for child in node.children:
-            n_board_seq = np.concatenate([board_seq,child.board])
-            evaluation,n_board_seq = minimax(child,False,n_board_seq)
-            if evaluation > max_eval:
-                max_eval = evaluation
-                board_seq = n_board_seq
-        return max_eval,board_seq
+            evaluation = minimax(child,False)
+            max_eval = np.maximum(max_eval,evaluation)
+        return max_eval
     else:
-        min_eval = 100
+        min_eval = np.inf
         node.create_children(node.board)
         for child in node.children:
-            n_board_seq = np.concatenate([board_seq,child.board])
-            evaluation, n_board_seq = minimax(child,True,n_board_seq)
-            if evaluation < min_eval:
-                min_eval = evaluation
-                board_seq = n_board_seq
-            
-        return min_eval,board_seq
+            evaluation = minimax(child,True)
+            min_eval = np.minimum(min_eval,evaluation)
+        return min_eval
+
 
 def create_start_board(start_crosses,start_circles, board_size = (3,3)):
     start_board  = np.zeros(board_size,dtype=int)
@@ -118,22 +96,28 @@ def draw_board(board):
     print('\n\n')
 
 
-start_crosses = [(1,0),(1,1)] 
+start_crosses = [(2,1),(1,1)] 
 start_circles = [(0,1),(1,2)]
 
 board = create_start_board(start_crosses,start_circles,board_size=(3,3))
-
+# board = np.zeros((3,3))
 
 rootnode = Node(board,0,1)
-eval,board_seq = minimax(rootnode,True,board)
-# print(board_seq)
 
-splits = np.arange(3,len(board_seq)+4,3)
-splits
-for split in splits:
-    draw_board(board_seq[split-3:split])
+def find_best_move(root):
+    root.create_children(root.board)
+    scores = []
+    for child in root.children:
+        max_player = child.player_move == 1
+        value = minimax(child,max_player)
+        scores.append(value)
+    if root.player_move ==1:
+        best_move = np.argmax(scores)
+    else:
+        best_move = np.argmin(scores)
+    return root.children[best_move],scores
 
-
-# board = np.array([[1,1,1],[0,0,0],[0,0,0]])
-# check_winner(board)
-# print(board)
+draw_board(rootnode.board)
+while rootnode.terminal is False:
+    rootnode, scores = find_best_move(rootnode)
+    draw_board(rootnode.board)
