@@ -20,18 +20,17 @@ class MCTS_UCT():
 
         # get possible actions for the current state of the board
         self._possible_actions = self.possible_actions()
-        return
 
     # return the moves that can be made for the current state of the board
     def possible_actions(self):
-        self._possible_actions = self.state.get_moves()
-        return self._possible_actions
+        _possible_actions = self.state.get_moves()
+        return _possible_actions
 
     # the q-value for a state is defined as: wins - losses
     def q_value(self):
         return self._outcome[1] - self._outcome[-1]
 
-    def expand(self):
+    def expand(self): #take the last action in the list, 
         # action becomes the last value that is in the possible moves list
         action = self._possible_actions.pop()
         next_state = self.state.move(action)
@@ -46,19 +45,23 @@ class MCTS_UCT():
 
     def rollout(self):
         # save the current state of the board
-        current_rollout_state = self.state
-        
+        current_rollout_state = deepcopy(self.state)
+        player = 1
         # rollout until the game ends
         while not current_rollout_state.end_game():
             
             # get the moves that are possible
-            possible_moves = current_rollout_state.get_moves()
+            possible_moves = deepcopy(current_rollout_state.get_moves())
 
             # from the possible moves, perform a random action 
             action = possible_moves[np.random.randint(len(possible_moves))]
 
             # update the board with the action
-            current_rollout_state = current_rollout_state.move(action)
+            
+            current_rollout_state = deepcopy(current_rollout_state.move(action,player))
+            print(current_rollout_state.board)
+            player = player % 2 + 1
+            # current_rollout_state.move(action)
 
         # return the winner (-1, 0, 1)
         return current_rollout_state.game_outcome()
@@ -72,9 +75,9 @@ class MCTS_UCT():
         if self.parent:
             self.parent.backpropagate(outcome)
 
-    def best_child(self):
+    def best_child(self, const = 1):
         # calculate weights for all child nodes
-        choices_weights = [(c.q_value() / c._n_visits) + np.sqrt((2 * np.log(self._n_visits) / c._n_visits)) for c in self.children]
+        choices_weights = [(c.q_value() / c._n_visits) + const * np.sqrt((2 * np.log(self._n_visits) / c._n_visits)) for c in self.children]
         
         # return the child node with the heighest weight
         return self.children[np.argmax(choices_weights)]
@@ -86,10 +89,13 @@ class MCTS_UCT():
         while not current_node.state.end_game():
             # if there are any possible actions
             if len(current_node._possible_actions) != 0:
-                return current_node.expand()
+                return current_node.expand() # gives a child node, resulting from last action in actionlist
+                #constructs the child nodes, with given boards
+
             # if there are no possible actions
             else:
                 current_node = current_node.best_child()
+                #if al actions tried, choose best child
         return current_node
 
     def best_next_state(self):
@@ -97,31 +103,29 @@ class MCTS_UCT():
         
         for _ in range(n_simulations):
             
-            current_node = self._tree_policy()
-            r = current_node.rollout()
-            current_node.backpropagate(r)
+            current_node = self._tree_policy() #finds leave node
+            r = current_node.rollout() #rollout from leave node
+            print(r)
+            current_node.backpropagate(r) #update values of nodes in path to leaf node
         
-        return self.best_child()
+        return self.best_child() #returns best direct child node based on UCB
 
 
 class State:
-    def __init__(self, state):
-        self.state = state
+    def __init__(self, board):
+        self.board = board
         return
 
     # return indices of possible moves
     def get_moves(self): 
-        return list(np.argwhere(self.state == 0))
+        return list(np.argwhere(self.board == 0))
 
     def end_game(self):
         winner = self.game_outcome()
         # winner == False: no winner is determined 
-        if isinstance(winner, bool):
+        if winner == None:
             return False
         # winner == 0: draw
-        elif isinstance(winner, int) and winner == 0:
-            return True
-        # winner == -1 or winner == 1
         else:
             return True
 
@@ -131,6 +135,7 @@ class State:
         col2 = np.repeat(2,3).tolist()
 
         #checking the columns rows and diagonals for a winner
+        
         if self.check_win(col1):
             return 1
         elif self.check_win(col2):
@@ -138,22 +143,22 @@ class State:
         elif self.check_full():
             return 0
         else:
-            return False
+            return None
 
     # check rows, columns and diagonal for a winning state
     def check_win(self, col):
-        if (col in self.state.tolist() or col in self.state.T.tolist() or self.state.diagonal().tolist() == col or 
-        np.fliplr(self.state).diagonal().tolist() == col):
+        if (col in self.board.tolist() or col in self.board.T.tolist() or self.board.diagonal().tolist() == col or 
+        np.fliplr(self.board).diagonal().tolist() == col):
             return True
 
     # check whether the board is full
     def check_full(self):
-        if np.count_nonzero(self.state) == self.state.size:
+        if np.count_nonzero(self.board) == self.board.size:
             return True
 
     def move(self, action, player=1):
         # deepcopy to prevent multiple actions taken
-        state = deepcopy(self.state)
+        state = deepcopy(self.board)
 
         # perform the action
         y,x = action
@@ -167,7 +172,7 @@ def init_board():
     board = np.zeros((1,9)).flatten()
     board[[3,4]] = 1
     board[[1,5]] = 2
-    return board.reshape(3,3)
+    return board.reshape(3,3).astype(int)
 
 def random_action(board):
     # all possible actions
@@ -203,10 +208,10 @@ def main():
     mcts = MCTS_UCT(board_state, parent=None, parent_action=None)
 
     # draw initial state of the board
-    draw_board(board_state.state)
+    draw_board(board_state.board)
     
     # initialize starting player
-    player = 1
+    player = 0
 
     while not board_state.end_game():
         # player X
@@ -227,7 +232,7 @@ def main():
         elif player == 1:
             
             # determine a random action
-            action = random_action(board_state.state)
+            action = random_action(board_state.board)
             y,x = action
             print('O: ', action)
 
@@ -238,7 +243,7 @@ def main():
             mcts = MCTS_UCT(board_state, None, action)
 
         # draw the updated state of the board
-        draw_board(board_state.state)
+        draw_board(board_state.board)
 
         player = (player + 1) % 2
 
