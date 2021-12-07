@@ -68,7 +68,6 @@ class Tree:
         self.board = start_board
         self.root = Node(start_board,0,player)
         self.node_index = 1
-
     
     def rollout(self,leaf_node):
         node = leaf_node
@@ -78,7 +77,7 @@ class Tree:
             node = np.random.choice(node.children)
         return node.value
 
-    def policy_run(self,node,chain,c):
+    def policy_run(self,node,chain,c): #chain is the path of nodes which q-values are updated
         if (node.count == 0 and node != self.root) or node.terminal:
             reward = self.rollout(node)
             return reward,chain
@@ -112,7 +111,7 @@ class Tree:
 
     def policy_from_root(self, root, c):
         reward, chain = self.policy_run(root, [root], c)
-        self.backprop(chain,reward)
+        self.backprop(chain,reward) #update all the scores in the chain
 
     def UCB_MCTS(self,root,iters,path,c):
         for _ in range(iters):
@@ -195,5 +194,5 @@ def find_best_move(root):
 
 tree = Tree(board,1)
 draw_board(tree.root.board)
-win, path = tree.UCB_MCTS(root = tree.root, iters = 10000,path = [], c = 1)
+win, path = tree.UCB_MCTS(root = tree.root, iters = 10000,path = [], c = 2)
 # [print(node.board) for node in path]
