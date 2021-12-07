@@ -1,5 +1,6 @@
 import numpy as np
 from copy import deepcopy
+from tqdm import tqdm
 
 class Node:
     def __init__(self,board,index, player_move, parent = None):
@@ -99,14 +100,14 @@ class Tree:
     def move_root(self,root):
         q_values = [child.total/child.count for child in root.children]
         en_move = root.children[np.argmax(q_values)]
-        print('q values: ',q_values)
-        draw_board(en_move.board)
+        # print('q values: ',q_values)
+        # draw_board(en_move.board)
         if en_move.terminal:
             return en_move
         else:
             en_move.create_children(en_move.board)
             new_root = np.random.choice(en_move.children)
-            draw_board(new_root.board)
+            # draw_board(new_root.board)
             return new_root
 
     def policy_from_root(self, root, c):
@@ -150,15 +151,20 @@ def create_start_board(start_crosses,start_circles, board_size = (3,3)):
         start_board[circle] = 2
     return start_board
 
-def draw_board(board):
+def draw_board(board,scores = None):
+    i= 0
     for y in range(board.shape[0]):
         for x in range(board.shape[1]):
             if board[y,x] == 0:
-                print('   ', end="")
+                if scores is not None:
+                    print(f"{scores[i] : .2f}", end="")
+                    i+=1
+                else:
+                    print('   ', end="")
             elif board[y,x] == 1:
-                print(' X ', end="")
+                print('  X  ', end="")
             elif board[y,x] == 2:
-                print(' O ', end="")
+                print('  O  ', end="")
             if x != board.shape[1] - 1:
                 print('|', end="")
         if y != board.shape[0] - 1:
@@ -166,7 +172,7 @@ def draw_board(board):
     print('\n\n')
 
 
-start_crosses = [(2,1),(1,1)] 
+start_crosses = [(1,0),(1,1)] 
 start_circles = [(0,1),(1,2)]
 
 board = create_start_board(start_crosses,start_circles,board_size=(3,3))
@@ -192,7 +198,75 @@ def find_best_move(root):
 #     rootnode, scores = find_best_move(rootnode)
 #     draw_board(rootnode.board)
 
-tree = Tree(board,1)
-draw_board(tree.root.board)
-win, path = tree.UCB_MCTS(root = tree.root, iters = 10000,path = [], c = 2)
+# tree = Tree(board,1)
+# draw_board(tree.root.board)
+# win, path = tree.UCB_MCTS(root = tree.root, iters = 10000,path = [], c = 2)
 # [print(node.board) for node in path]
+
+#determining the probabilities of winning for each action
+start_crosses = [(1,0),(1,1)] 
+start_circles = [(0,1),(1,2)]
+
+# board = create_start_board(start_crosses,start_circles,board_size=(3,3))
+# tree = Tree(board,1)
+# tree.root.create_children(board)
+
+from joblib import Parallel, delayed
+def count_wins(child,simulations, iters):
+    wins = 0
+    child.create_children(child.board)
+    for sim in range(simulations):
+        next_node = np.random.choice(child.children)
+        tree = Tree(next_node.board,1)
+        win, _ = tree.UCB_MCTS(root = tree.root, iters = iters, path = [], c=1)
+        wins += win == 1
+    return wins
+
+# simulations = 5000
+# iters = 100
+# wins = Parallel(n_jobs=-1,verbose=3)(delayed(count_wins)(child,simulations, iters) for child in tree.root.children)
+# p_wins = np.array(wins)/simulations
+# # print(p_wins)
+# draw_board(tree.root.board,p_wins)
+
+def win_prob(board,simulations,iters):
+    wins = 0
+
+    for sim in range(simulations):
+        node = Node(board,1,1)
+        tree = Tree(node.board,1)
+        win, _ = tree.UCB_MCTS(root = tree.root, iters = iters, path = [], c=1)
+        wins += win==1
+    return wins/simulations
+
+start_crosses = [(1,0),(1,1)] 
+start_circles = [(0,1),(1,2)]
+
+board = create_start_board(start_crosses,start_circles,board_size=(3,3))
+
+simulations = 5000
+iter_list = np.arange(5,30,1)
+
+# iter_results = []
+# for iters in iter_list:
+#     iter_results.append(win_prob(board,simulations,iters))
+
+iter_results = Parallel(n_jobs=-1,verbose=3)(delayed(win_prob)(board,simulations, iters) for iters in iter_list)
+import matplotlib.pyplot as plt
+
+plt.plot(iter_list,iter_results)
+plt.xlabel('number of UCB updates per root node')
+plt.ylabel('Estimated probability of winning')
+plt.savefig('convergence.png')
+
+
+
+# for i,child in tqdm(enumerate(tree.root.children)):
+#     for sim in tqdm(range(simulations),leave = False):
+#         # print(child.board)
+#         win, path = tree.UCB_MCTS(root = child, iters = 1000, path = [], c=1)
+#         wins[i] += win == 1
+
+# p_wins = wins/simulations
+
+# print(wins, p_wins)
